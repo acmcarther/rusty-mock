@@ -15,7 +15,7 @@ macro_rules! stub {
 
     impl $tr8 for $new_type {
       $(fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
-        match self.$fn_ident.return_val {
+        match self.$fn_ident.return_val.clone() {
           Some(val) => {
             let mut args = self.$fn_ident.call_args.borrow_mut();
             args.push(($($arg_ident),*));
@@ -84,6 +84,7 @@ impl<T, Args: PartialEq> StubHelper<T, Args> {
     !self.was_called_with_args(args)
   }
 }
+
 #[cfg(test)]
 mod tests {
   use super::*;
