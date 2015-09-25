@@ -1,41 +1,5 @@
 use std::cell::RefCell;
 
-#[macro_export]
-macro_rules! stub {
-  (
-    $tr8:ty as $new_type:ident {
-      $(fn $fn_ident:ident ($($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty)*
-    }
-  ) => {
-
-    #[derive(Debug)]
-    struct $new_type {
-      $($fn_ident: StubHelper<$ret_type, ($($arg_type),*)>),*,
-    }
-
-    impl $tr8 for $new_type {
-      $(fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
-        match self.$fn_ident.return_val.clone() {
-          Some(val) => {
-            let mut args = self.$fn_ident.call_args.borrow_mut();
-            args.push(($($arg_ident),*));
-            val
-          },
-          _ => panic!("You need to call #returns on this stub for this method")
-        }
-      })*
-    }
-
-    impl $new_type {
-      fn new() -> $new_type {
-        $new_type {
-          $($fn_ident: StubHelper::new()),*,
-        }
-      }
-    }
-  }
-}
-
 #[derive(Debug)]
 pub struct StubHelper<T, Args> {
   return_val: Option<T>,
@@ -85,6 +49,80 @@ impl<T, Args: PartialEq> StubHelper<T, Args> {
   }
 }
 
+#[macro_export]
+macro_rules! create_stub {
+  (
+    $new_type:ident {
+      $($fn_ident:ident ($($arg_ty:ty),*) -> $ret_ty:ty),*
+    }
+  ) => {
+    #[derive(Debug)]
+    struct $new_type {
+      $($fn_ident: StubHelper<$ret_ty, ($($arg_ty),*)>),*,
+    }
+
+    impl $new_type {
+      fn new() -> $new_type {
+        $new_type {
+          $($fn_ident: StubHelper::new()),*
+        }
+      }
+    }
+  }
+}
+
+macro_rules! impl_helper {
+  (fn $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          let mut args = self.$fn_ident.call_args.borrow_mut();
+          args.push(($($arg_ident),*));
+          val
+        },
+        _ => panic!("You need to call #returns on this stub for this method")
+      }
+    }
+  };
+  (fn $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          let mut args = self.$fn_ident.call_args.borrow_mut();
+          args.push(($($arg_ident),*));
+          val
+        },
+        _ => panic!("You need to call #returns on this stub for this method")
+      }
+    }
+  };
+  (fn $fn_ident:ident (self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
+      panic!("Self-consuming methods cannot currently be stubbed")
+    }
+  };
+  (fn $fn_ident:ident ($($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident ($(_: $arg_type),*) -> $ret_type {
+      panic!("Static methods cannot currently be stubbed")
+    }
+  };
+}
+
+#[macro_export]
+macro_rules! instrument_stub {
+  (
+    $new_type:ident as $tr8:ident {
+      $({fn $fn_ident:ident $($e:tt)*})*
+    }
+  ) => {
+    impl $tr8 for $new_type {
+      $(impl_helper!(fn $fn_ident $($e)*);)*
+    }
+  }
+
+}
+
+
 #[cfg(test)]
 mod tests {
   use super::*;
@@ -103,10 +141,17 @@ mod tests {
     let _ = a.create_comment(1, 2, 3);
   }
 
-  stub! {
-    IssueCommenter as IssueCommenterStub {
-      fn create_comment (a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>
-      fn create_fun (b1: u32) -> u32
+  create_stub! {
+    IssueCommenterStub {
+      create_comment(Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>,
+      create_fun(u32) -> u32
+    }
+  }
+
+  instrument_stub! {
+    IssueCommenterStub as IssueCommenter {
+      {fn create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {fn create_fun (&self, b1: u32) -> u32}
     }
   }
 

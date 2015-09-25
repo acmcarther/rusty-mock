@@ -5,40 +5,64 @@
 Rusty-Mock provides a super quick macro for mocking out an implementor for your Trait. If you follow the practice of building traits for your application boundaries this lets you test them in isolation. The macro & interface is super raw, so please take care.
 
 ## Example
+### Creating some useful traits for us
+```Rust
+trait Trait1 {
+  fn static_method1(u32) -> u32;
+  fn static_method2(u32) -> u32;
+  fn self_method(&self, i32, i32, i32) -> i32;
+  fn mut_self_method(&mut self, i32, i32, i32) -> i32;
+  fn consuming_method(self, u32) -> u32;
+}
+
+trait Trait2 {
+  fn someone_elses_method(&self, i32) -> i32;
+}
+```
+### Creating a function using something implementing those traits
 ```rust
-pub type DoEngineer = String;
-pub type DoTools = String;
-pub type FinishedProduct = String;
-
-pub trait MyDoer {
-  fn do_a_thing(&self, _: DoEngineer, _: DoTools) -> FinishedProduct;
-  fn do_that_other_thing(&self, _: DoTools) -> FinishedProduct;
+fn test_fn<Tester: Trait1 + Trait2>(x: &Tester) {
+  x.someone_elses_method(1);
+  x.self_method(1, 2, 3);
+}
+```
+### Stubbing out those traits (in your test)
+```rust
+create_stub! {
+  TraitStub2 {
+    self_method(i32, i32, i32) -> i32,
+    mut_self_method(i32, i32, i32) -> i32,
+    someone_elses_method(i32) -> i32
+  }
 }
 
-pub fn use_a_doer<T: MyDoer>(a: &T) -> FinishedProduct {
-  a.do_a_thing("Donald".to_owned(), "Shovel".to_owned())
+instrument_stub! {
+  TraitStub2 as Trait1 {
+    {fn static_method1(a: u32) -> u32}
+    {fn static_method2(a: u32) -> u32}
+    {fn self_method(&self, a: i32, b: i32, c: i32) -> i32}
+    {fn mut_self_method(&mut self, a: i32, b: i32, c: i32) -> i32}
+    {fn consuming_method(self, a: u32) -> u32}
+  }
 }
 
-#[cfg(test)]
-mod tests {
-  use super::*;
-
-  stub! {
-    MyDoer as DoerStub {
-      fn do_a_thing (person: DoEngineer, tools: DoTools) -> FinishedProduct
-      fn do_that_other_thing (tools: DoTools) -> FinishedProduct
-    }
+instrument_stub! {
+  TraitStub2 as Trait2 {
+    {fn someone_elses_method(&self, a: i32) -> i32}
   }
+}
+```
 
-  #[test]
-  fn gets_it_done() {
-    let mut stub = DoerStub::new();
-    stub.do_a_thing.returns("a completed thing".to_owned());
-    let result = use_a_doer(&stub);
-    assert!(result == "a completed thing".to_owned());
-    assert!(stub.do_a_thing.was_called_once());
-    assert!(stub.do_a_thing.was_called_with_args(&("Donald".to_owned(), "Shovel".to_owned())));
-  }
+### In your test
+```rust
+#[test]
+fn it_was_called() {
+  let mut x = TraitStub1::new();
+  x.someone_elses_method.returns(5);
+  x.self_method.returns(5);
+  test_fn(&x);
+  assert!(x.self_method.was_called());
+  assert!(!x.mut_self_method.was_called());
 }
 ```
 
