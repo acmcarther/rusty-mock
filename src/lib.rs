@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 
-#[derive(Debug)]
 pub struct StubHelper<T, Args> {
   return_val: Option<T>,
   call_args: RefCell<Vec<Args>>
@@ -56,7 +55,6 @@ macro_rules! create_stub {
       $($fn_ident:ident ($($arg_ty:ty),*) -> $ret_ty:ty),*
     }
   ) => {
-    #[derive(Debug)]
     struct $new_type {
       $($fn_ident: StubHelper<$ret_ty, ($($arg_ty),*)>),*,
     }
