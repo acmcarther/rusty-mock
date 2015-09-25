@@ -96,12 +96,12 @@ macro_rules! impl_helper {
     }
   };
   (nostub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
-    fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
+    fn $fn_ident (&self, $(_: $arg_type),*) -> $ret_type {
       panic!("Method was not stubbed {}", stringify!($fn_ident))
     }
   };
   (nostub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
-    fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
+    fn $fn_ident (&mut self, $(_: $arg_type),*) -> $ret_type {
       panic!("Method was not stubbed {}", stringify!($fn_ident))
     }
   };
