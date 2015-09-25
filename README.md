@@ -38,17 +38,17 @@ create_stub! {
 
 instrument_stub! {
   TraitStub2 as Trait1 {
-    {fn static_method1(a: u32) -> u32}
-    {fn static_method2(a: u32) -> u32}
-    {fn self_method(&self, a: i32, b: i32, c: i32) -> i32}
-    {fn mut_self_method(&mut self, a: i32, b: i32, c: i32) -> i32}
-    {fn consuming_method(self, a: u32) -> u32}
+    {nostub static_method1(a: u32) -> u32}
+    {nostub static_method2(a: u32) -> u32}
+    {stub self_method(&self, a: i32, b: i32, c: i32) -> i32}
+    {stub mut_self_method(&mut self, a: i32, b: i32, c: i32) -> i32}
+    {nostub consuming_method(self, a: u32) -> u32}
   }
 }
 
 instrument_stub! {
   TraitStub2 as Trait2 {
-    {fn someone_elses_method(&self, a: i32) -> i32}
+    {stub someone_elses_method(&self, a: i32) -> i32}
   }
 }
 ```

@@ -71,7 +71,7 @@ macro_rules! create_stub {
 
 #[macro_export]
 macro_rules! impl_helper {
-  (fn $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (stub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -79,11 +79,11 @@ macro_rules! impl_helper {
           args.push(($($arg_ident),*));
           val
         },
-        _ => panic!("You need to call #returns on this stub for this method")
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (fn $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (stub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -91,18 +91,28 @@ macro_rules! impl_helper {
           args.push(($($arg_ident),*));
           val
         },
-        _ => panic!("You need to call #returns on this stub for this method")
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (fn $fn_ident:ident (self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (nostub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
-      panic!("Self-consuming methods cannot currently be stubbed")
+      panic!("Method was not stubbed {}", stringify!($fn_ident))
     }
   };
-  (fn $fn_ident:ident ($($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (nostub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
+      panic!("Method was not stubbed {}", stringify!($fn_ident))
+    }
+  };
+  (nostub $fn_ident:ident (self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
+      panic!("Method {} not stubbed, and self-consuming methods cannot currently be stubbed", stringify!($fn_ident))
+    }
+  };
+  (nostub $fn_ident:ident ($($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident ($(_: $arg_type),*) -> $ret_type {
-      panic!("Static methods cannot currently be stubbed")
+      panic!("Method {} not stubbed and static methods cannot currently be stubbed", stringify!($fn_ident))
     }
   };
 }
@@ -111,11 +121,11 @@ macro_rules! impl_helper {
 macro_rules! instrument_stub {
   (
     $new_type:ident as $tr8:ident {
-      $({fn $fn_ident:ident $($e:tt)*})*
+      $({$fn_ident:ident $($e:tt)*})*
     }
   ) => {
     impl $tr8 for $new_type {
-      $(impl_helper!(fn $fn_ident $($e)*);)*
+      $(impl_helper!($fn_ident $($e)*);)*
     }
   }
 
@@ -149,14 +159,14 @@ mod tests {
 
   instrument_stub! {
     IssueCommenterStub as IssueCommenter {
-      {fn create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
-      {fn create_fun (&self, b1: u32) -> u32}
+      {stub create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {stub create_fun (&self, b1: u32) -> u32}
     }
   }
 
 
   #[test]
-  #[should_panic(expected = "You need to call #returns on this stub for this method")]
+  #[should_panic(expected = "#returns was not called on create_comment prior to invocation")]
   fn panics_when_return_not_defined() {
     let stub = IssueCommenterStub::new();
     let _ = stub.create_comment(1, 2, 3);
