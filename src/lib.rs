@@ -69,6 +69,7 @@ macro_rules! create_stub {
   }
 }
 
+#[macro_export]
 macro_rules! impl_helper {
   (fn $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
