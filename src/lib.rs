@@ -5,13 +5,14 @@ pub struct StubHelper<T, Args> {
   call_args: RefCell<Vec<Args>>
 }
 
-impl<T, Args> StubHelper<T, Args> {
+impl<T: Clone, Args> StubHelper<T, Args> {
   pub fn new() -> StubHelper<T, Args> {
     StubHelper {
       return_val: None,
       call_args: RefCell::new(Vec::new())
     }
   }
+  pub fn get_return_val(&self) -> Option<T> { self.return_val.clone() }
   pub fn returns(&mut self, val: T) { self.return_val = Some(val); }
   pub fn call_count(&self) -> u32 { self.call_args.borrow().len() as u32 }
   pub fn was_called_n_times(&self, times: u32) -> bool { self.call_count() == times }
@@ -19,7 +20,7 @@ impl<T, Args> StubHelper<T, Args> {
   pub fn was_called(&self) -> bool { self.call_count() != 0 }
 }
 
-impl<T, Args: Clone> StubHelper<T, Args> {
+impl<T: Clone, Args: Clone> StubHelper<T, Args> {
   pub fn get_args_for_call(&self, call: usize) -> Option<Args> {
     self.call_args.borrow()
       .get(call)
@@ -27,7 +28,7 @@ impl<T, Args: Clone> StubHelper<T, Args> {
   }
 }
 
-impl<T, Args: PartialEq> StubHelper<T, Args> {
+impl<T: Clone, Args: PartialEq> StubHelper<T, Args> {
   pub fn was_called_with_args(&self, args: &Args) -> bool {
     self.call_args.borrow()
       .iter()
@@ -40,7 +41,7 @@ impl<T, Args: PartialEq> StubHelper<T, Args> {
     self.call_args.borrow()
       .iter()
       .filter(|call_args| *call_args == args)
-      .count() == total_calls as usize
+      .count() as u32 == total_calls
   }
 
   pub fn never_called_with_args(&self, args: &Args) -> bool {
@@ -73,7 +74,7 @@ macro_rules! create_stub {
 macro_rules! impl_helper {
   (stub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
-      match self.$fn_ident.return_val.clone() {
+      match self.$fn_ident.get_return_val() {
         Some(val) => {
           let mut args = self.$fn_ident.call_args.borrow_mut();
           args.push(($($arg_ident),*));
@@ -85,7 +86,7 @@ macro_rules! impl_helper {
   };
   (stub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
-      match self.$fn_ident.return_val.clone() {
+      match self.$fn_ident.get_return_val() {
         Some(val) => {
           let mut args = self.$fn_ident.call_args.borrow_mut();
           args.push(($($arg_ident),*));
