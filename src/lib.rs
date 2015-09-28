@@ -1,8 +1,8 @@
 use std::cell::RefCell;
 
 pub struct StubHelper<T, Args> {
-  return_val: Option<T>,
-  call_args: RefCell<Vec<Args>>
+  pub return_val: Option<T>,
+  pub call_args: RefCell<Vec<Args>>
 }
 
 impl<T: Clone, Args> StubHelper<T, Args> {
@@ -12,7 +12,6 @@ impl<T: Clone, Args> StubHelper<T, Args> {
       call_args: RefCell::new(Vec::new())
     }
   }
-  pub fn get_return_val(&self) -> Option<T> { self.return_val.clone() }
   pub fn returns(&mut self, val: T) { self.return_val = Some(val); }
   pub fn call_count(&self) -> u32 { self.call_args.borrow().len() as u32 }
   pub fn was_called_n_times(&self, times: u32) -> bool { self.call_count() == times }
@@ -74,7 +73,7 @@ macro_rules! create_stub {
 macro_rules! impl_helper {
   (stub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
-      match self.$fn_ident.get_return_val() {
+      match self.$fn_ident.return_val.clone() {
         Some(val) => {
           let mut args = self.$fn_ident.call_args.borrow_mut();
           args.push(($($arg_ident),*));
@@ -86,7 +85,7 @@ macro_rules! impl_helper {
   };
   (stub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
-      match self.$fn_ident.get_return_val() {
+      match self.$fn_ident.return_val.clone() {
         Some(val) => {
           let mut args = self.$fn_ident.call_args.borrow_mut();
           args.push(($($arg_ident),*));
