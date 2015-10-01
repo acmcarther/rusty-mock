@@ -13,6 +13,7 @@ trait Trait1 {
   fn self_method(&self, i32, i32, i32) -> i32;
   fn mut_self_method(&mut self, i32, i32, i32) -> i32;
   fn consuming_method(self, u32) -> u32;
+  fn method_with_ref(&mut self, &i32, i32) -> i32};
 }
 
 trait Trait2 {
@@ -33,6 +34,7 @@ create_stub! {
     self_method(i32, i32, i32) -> i32,
     mut_self_method(i32, i32, i32) -> i32,
     someone_elses_method(i32) -> i32
+    method_with_ref(i32, i32) -> i32}
   }
 }
 
@@ -42,6 +44,7 @@ instrument_stub! {
     {nostub static_method2(a: u32) -> u32}
     {stub self_method(&self, a: i32, b: i32, c: i32) -> i32}
     {stub mut_self_method(&mut self, a: i32, b: i32, c: i32) -> i32}
+    {clone_stub method_with_ref(&mut self, a: &i32, b: i32) -> i32}
     {nostub consuming_method(self, a: u32) -> u32}
   }
 }
@@ -52,6 +55,10 @@ instrument_stub! {
   }
 }
 ```
+Note: Return value must be cloneable so the stub can be called multiple times. If the method being stubbed takes references, you must stub them with clone_stub, and build the stub with the actual type rather than the reference as in the function signature. All of the arguments in a clone_stub method must be cloneable, to avoid lifetime issues.
+
+To recap: Return values must always be cloneable
+If a method takes any references it must be stubbed with clone_stub, and all args must be cloneable
 
 ### In your test
 ```rust

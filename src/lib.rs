@@ -62,7 +62,7 @@ macro_rules! create_stub {
     impl $new_type {
       fn new() -> $new_type {
         $new_type {
-          $($fn_ident: StubHelper::new()),*
+          $($fn_ident: StubHelper::new()),*,
         }
       }
     }
@@ -83,12 +83,36 @@ macro_rules! impl_helper {
       }
     }
   };
+  (clone_stub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          let mut args = self.$fn_ident.call_args.borrow_mut();
+          args.push(($($arg_ident.clone()),*));
+          val
+        },
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+      }
+    }
+  };
   (stub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
           let mut args = self.$fn_ident.call_args.borrow_mut();
           args.push(($($arg_ident),*));
+          val
+        },
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+      }
+    }
+  };
+  (clone_stub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          let mut args = self.$fn_ident.call_args.borrow_mut();
+          args.push(($($arg_ident.clone()),*));
           val
         },
         _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
@@ -144,6 +168,7 @@ mod tests {
   trait IssueCommenter {
     fn create_comment(&self, _: Repository, _: IssueId, details: CreateIssueComment) -> Result<IssueComment, GitErr>;
     fn create_fun(&self, _: u32) -> u32;
+    fn create_with_reference(&self, _: &u32) -> u32;
   }
 
   fn i_take_a_thing<T: IssueCommenter>(a: &T) {
@@ -153,7 +178,8 @@ mod tests {
   create_stub! {
     IssueCommenterStub {
       create_comment(Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>,
-      create_fun(u32) -> u32
+      create_fun(u32) -> u32,
+      create_with_reference(u32) -> u32
     }
   }
 
@@ -161,6 +187,7 @@ mod tests {
     IssueCommenterStub as IssueCommenter {
       {stub create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
       {stub create_fun (&self, b1: u32) -> u32}
+      {clone_stub create_with_reference (&self, b1: &u32) -> u32}
     }
   }
 
