@@ -1,25 +1,68 @@
 use std::cell::RefCell;
+use std::marker::PhantomData;
 
-pub struct StubHelper<T, Args> {
+pub trait CallWatcher {
+  fn call_count(&self) -> u32;
+  fn was_called_n_times(&self, times: u32) -> bool { self.call_count() == times }
+  fn was_called_once(&self) -> bool { self.was_called_n_times(1) }
+  fn was_called(&self) -> bool { self.call_count() != 0 }
+}
+
+pub trait ReturnStubber<T> {
+  fn returns(&mut self, val: T);
+}
+
+pub struct SimpleStub<T: Clone> {
+  pub return_val: Option<T>,
+  pub call_count: u32
+}
+
+pub struct ArgWatchingStub<T: Clone, Args> {
   pub return_val: Option<T>,
   pub call_args: RefCell<Vec<Args>>
 }
 
-impl<T: Clone, Args> StubHelper<T, Args> {
-  pub fn new() -> StubHelper<T, Args> {
-    StubHelper {
+pub struct InterceptingStub<T: Clone, Args, F: Fn(Args)> {
+  pub return_val: Option<T>,
+  pub call_interceptor: F,
+  pub call_count: u32,
+  phantom: PhantomData<Args> // Necessary because Fn(Args) does not count as "using" args
+}
+
+impl<T: Clone, Args> ArgWatchingStub<T, Args> {
+  pub fn new() -> ArgWatchingStub<T, Args> {
+    ArgWatchingStub {
       return_val: None,
       call_args: RefCell::new(Vec::new())
     }
   }
-  pub fn returns(&mut self, val: T) { self.return_val = Some(val); }
-  pub fn call_count(&self) -> u32 { self.call_args.borrow().len() as u32 }
-  pub fn was_called_n_times(&self, times: u32) -> bool { self.call_count() == times }
-  pub fn was_called_once(&self) -> bool { self.was_called_n_times(1) }
-  pub fn was_called(&self) -> bool { self.call_count() != 0 }
 }
 
-impl<T: Clone, Args: Clone> StubHelper<T, Args> {
+impl<T: Clone> ReturnStubber<T> for SimpleStub<T> {
+  fn returns(&mut self, val: T) { self.return_val = Some(val); }
+}
+
+impl<T: Clone, Args> ReturnStubber<T> for ArgWatchingStub<T, Args> {
+  fn returns(&mut self, val: T) { self.return_val = Some(val); }
+}
+
+impl<T: Clone, Args, F: Fn(Args)> ReturnStubber<T> for InterceptingStub<T, Args, F> {
+  fn returns(&mut self, val: T) { self.return_val = Some(val); }
+}
+
+impl<T: Clone, Args> CallWatcher for ArgWatchingStub<T, Args> {
+  fn call_count(&self) -> u32 { self.call_args.borrow().len() as u32 }
+}
+
+impl<T: Clone> CallWatcher for SimpleStub<T> {
+  fn call_count(&self) -> u32 { self.call_count }
+}
+
+impl<T: Clone, Args, F: Fn(Args)> CallWatcher for InterceptingStub<T, Args, F> {
+  fn call_count(&self) -> u32 { self.call_count }
+}
+
+impl<T: Clone, Args: Clone> ArgWatchingStub<T, Args> {
   pub fn get_args_for_call(&self, call: usize) -> Option<Args> {
     self.call_args.borrow()
       .get(call)
@@ -27,7 +70,7 @@ impl<T: Clone, Args: Clone> StubHelper<T, Args> {
   }
 }
 
-impl<T: Clone, Args: PartialEq> StubHelper<T, Args> {
+impl<T: Clone, Args: PartialEq> ArgWatchingStub<T, Args> {
   pub fn was_called_with_args(&self, args: &Args) -> bool {
     self.call_args.borrow()
       .iter()
@@ -48,6 +91,12 @@ impl<T: Clone, Args: PartialEq> StubHelper<T, Args> {
   }
 }
 
+impl<T: Clone, Args, F: Fn(Args)> InterceptingStub<T, Args, F> {
+  pub fn set_interceptor(&mut self, f: F) {
+    self.call_interceptor = f
+  }
+}
+
 #[macro_export]
 macro_rules! create_stub {
   (
@@ -56,13 +105,13 @@ macro_rules! create_stub {
     }
   ) => {
     struct $new_type {
-      $($fn_ident: StubHelper<$ret_ty, ($($arg_ty),*)>),*,
+      $($fn_ident: ArgWatchingStub<$ret_ty, ($($arg_ty),*)>),*,
     }
 
     impl $new_type {
       fn new() -> $new_type {
         $new_type {
-          $($fn_ident: StubHelper::new()),*
+          $($fn_ident: ArgWatchingStub::new()),*
         }
       }
     }
