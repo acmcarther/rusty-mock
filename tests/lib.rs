@@ -434,21 +434,15 @@ mod multiple_trait_stub {
 mod stub_create_macro {
   use rusty_mock::*;
 
-  type Repository = u32;
-  type IssueId = u32;
-  type CreateIssueComment = u32;
-  type IssueComment = u32;
-  type GitErr = u32;
-
   trait Trait {
-    fn arg_watching_stub(&self, _: Repository, _: IssueId, details: CreateIssueComment) -> Result<IssueComment, GitErr>;
-    fn simple_stub(&self, _: u32) -> u32;
-    fn intercepting_stub(&self, _: &u32) -> u32;
+    fn arg_watching_stub(&self, u32, u32, u32) -> Result<u32, u32>;
+    fn simple_stub(&self, u32) -> u32;
+    fn intercepting_stub(&self, &u32) -> u32;
   }
 
   create_stub! {
     TraitStub {
-      {ArgWatchingStub: arg_watching_stub (Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {ArgWatchingStub: arg_watching_stub (u32, u32, u32) -> Result<u32, u32>}
       {SimpleStub: simple_stub (u32) -> u32}
       {InterceptingStub: intercepting_stub (&u32) -> u32}
     }
@@ -456,7 +450,7 @@ mod stub_create_macro {
 
   instrument_stub! {
     TraitStub as Trait {
-      {ArgWatchingStub: arg_watching_stub (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {ArgWatchingStub: arg_watching_stub (&self, a1: u32, a2: u32, a3: u32) -> Result<u32, u32>}
       {SimpleStub: simple_stub (&self, b1: u32) -> u32}
       {InterceptingStub: intercepting_stub (&self, b1: &u32) -> u32}
     }
