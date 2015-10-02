@@ -134,7 +134,7 @@ macro_rules! impl_helper {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
           match self.$fn_ident.call_interceptor {
-            Some(ref method) => method((($($arg_ident),*))),
+            Some(ref method) => method($($arg_ident),*),
             None => ()
           }
           self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
@@ -172,7 +172,10 @@ macro_rules! impl_helper {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
-          self.$fn_ident.call_interceptor.map(|method| method((($($arg_ident),*))));
+          match self.$fn_ident.call_interceptor {
+            Some(ref method) => method($($arg_ident),*),
+            None => ()
+          }
           self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
           val
         },
@@ -270,143 +273,4 @@ mod type_macros {
 
 #[cfg(test)]
 mod tests {
-  use super::*;
-  type Repository = u32;
-  type IssueId = u32;
-  type CreateIssueComment = u32;
-  type IssueComment = u32;
-  type GitErr = u32;
-
-  trait IssueCommenter {
-    fn create_comment(&self, _: Repository, _: IssueId, details: CreateIssueComment) -> Result<IssueComment, GitErr>;
-    fn create_fun(&self, _: u32) -> u32;
-    fn create_other(&self, _: u32) -> u32;
-    fn create_more(&self, _: &u32) -> u32;
-  }
-
-  fn i_take_a_thing<T: IssueCommenter>(a: &T) {
-    let _ = a.create_comment(1, 2, 3);
-  }
-
-  #[cfg(feature = "nightly")]
-  create_stub! {
-    IssueCommenterStub {
-      {ArgWatchingStub: create_comment (Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>}
-      {ArgWatchingStub: create_fun (u32) -> u32}
-      {SimpleStub: create_other (u32) -> u32}
-      {InterceptingStub: create_more (&u32) -> u32}
-    }
-  }
-
-  #[cfg(not(feature = "nightly"))]
-  struct IssueCommenterStub {
-    create_comment: ArgWatchingStub<Result<IssueComment, GitErr>, (Repository, IssueId, CreateIssueComment)>,
-    create_fun: ArgWatchingStub<u32, (u32)>,
-    create_other: SimpleStub<u32>,
-    create_more: InterceptingStub<u32, Fn(&u32)>,
-  }
-
-  #[cfg(not(feature = "nightly"))]
-  impl IssueCommenterStub {
-    fn new() -> IssueCommenterStub {
-      IssueCommenterStub {
-        create_comment: ArgWatchingStub::new(),
-        create_fun: ArgWatchingStub::new(),
-        create_other: SimpleStub::new(),
-        create_more: InterceptingStub::new(),
-      }
-    }
-  }
-
-  instrument_stub! {
-    IssueCommenterStub as IssueCommenter {
-      {ArgWatchingStub: create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
-      {ArgWatchingStub: create_fun (&self, b1: u32) -> u32}
-      {SimpleStub: create_other (&self, b1: u32) -> u32}
-      {InterceptingStub: create_more (&self, b1: &u32) -> u32}
-    }
-  }
-
-  type T = Fn(&i32, &i32) -> bool;
-
-
-  #[test]
-  #[should_panic(expected = "#returns was not called on [create_comment] prior to invocation")]
-  fn panics_when_return_not_defined() {
-    let stub = IssueCommenterStub::new();
-    let _ = stub.create_comment(1, 2, 3);
-  }
-
-  #[test]
-  fn it_was_called() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_comment.returns(Err(5));
-    assert!(!stub.create_comment.was_called());
-    let _ = stub.create_comment(1, 2, 3);
-    assert!(stub.create_comment.was_called());
-    let _ = stub.create_comment(1, 2, 3);
-    assert!(stub.create_comment.was_called());
-  }
-
-  #[test]
-  fn it_calls_the_args_correctly() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_comment.returns(Err(5));
-    let _ = stub.create_comment(1, 2, 3);
-    assert!(stub.create_comment.was_called_with_args(&(1,2,3)));
-  }
-
-  #[test]
-  fn it_calls_once() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_comment.returns(Err(5));
-    let _ = stub.create_comment(1, 2, 3);
-    assert!(stub.create_comment.was_called_once());
-  }
-
-  #[test]
-  #[should_panic(expected = "assertion failed: *x == 5")]
-  fn it_can_test_borrows_and_fail() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_more.set_interceptor(Box::new(move |x: &u32| assert!(*x == 5)));
-    stub.create_more.returns(10);
-    let _ = stub.create_more(&1);
-  }
-
-  #[test]
-  fn it_can_test_borrows_and_succeed() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_more.set_interceptor(Box::new(move |x: &u32| assert!(*x == 1)));
-    stub.create_more.returns(10);
-    let _ = stub.create_more(&1);
-    assert!(stub.create_more.was_called_once());
-  }
-
-  #[test]
-  fn it_never_calls_with_args() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_comment.returns(Err(5));
-    let _ = stub.create_comment(1, 2, 4);
-    assert!(stub.create_comment.never_called_with_args(&(1,2,3)));
-    let _ = stub.create_comment(1, 2, 3);
-    assert!(!stub.create_comment.never_called_with_args(&(1,2,3)));
-  }
-
-  #[test]
-  fn it_always_calls_with_args() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_comment.returns(Err(5));
-    let _ = stub.create_comment(1, 2, 3);
-    assert!(stub.create_comment.always_called_with_args(&(1,2,3)));
-    let _ = stub.create_comment(1, 2, 4);
-    assert!(!stub.create_comment.never_called_with_args(&(1,2,3)));
-  }
-
-  #[test]
-  fn it_works_in_place_of_the_trait() {
-    let mut stub = IssueCommenterStub::new();
-    stub.create_comment.returns(Err(5));
-    i_take_a_thing(&stub);
-    assert!(stub.create_comment.was_called());
-  }
 }
