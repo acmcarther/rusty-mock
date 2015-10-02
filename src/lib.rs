@@ -1,3 +1,4 @@
+#![feature(type_macros)]
 use std::cell::{Cell, RefCell};
 
 pub trait CallWatcher { fn call_count(&self) -> u32;
@@ -216,21 +217,54 @@ macro_rules! impl_helper {
 macro_rules! instrument_stub {
   (
     $new_type:ty as $tr8:ident {
-      $({$fn_ident:ident $($e:tt)*})*
+      $({$stub_ty:ident: $($e:tt)*})*
     }
   ) => {
-    impl<'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8> $tr8 for $new_type {
-      $(impl_helper!($fn_ident $($e)*);)*
+    impl $tr8 for $new_type {
+      $(impl_helper!($stub_ty $($e)*);)*
     }
   }
 
+}
+
+#[macro_export]
+macro_rules! build_stub_type {
+  (ArgWatchingStub ($($arg_type:ty),*) -> $ret_type:ty) => {
+    ArgWatchingStub<$ret_type, ($($arg_type),*)>
+  };
+  (SimpleStub ($($arg_type:ty),*) -> $ret_type:ty) => {
+    SimpleStub<$ret_type>
+  };
+  (InterceptingStub ($($arg_type:ty),*) -> $ret_type:ty) => {
+    InterceptingStub<$ret_type, Fn($($arg_type),*)>
+  };
+}
+
+#[macro_export]
+macro_rules! create_stub {
+  (
+    $new_type:ident {
+      $({$stub_ty:ident: $fn_ident:ident $($e:tt)*})*
+    }
+  ) => {
+    struct $new_type {
+      $($fn_ident: build_stub_type!($stub_ty $($e)*)),*
+    }
+
+    impl $new_type {
+      fn new() -> $new_type {
+        $new_type {
+          $($fn_ident: $stub_ty::new()),*
+        }
+      }
+    }
+  }
 }
 
 
 #[cfg(test)]
 mod tests {
   use super::*;
-  use std::marker::PhantomData;
   type Repository = u32;
   type IssueId = u32;
   type CreateIssueComment = u32;
@@ -248,32 +282,21 @@ mod tests {
     let _ = a.create_comment(1, 2, 3);
   }
 
-  struct IssueCommenterStub {
-    create_comment: ArgWatchingStub<Result<IssueComment, GitErr>, (Repository, IssueId, CreateIssueComment)>,
-    create_fun: ArgWatchingStub<u32, (u32)>,
-    create_other: SimpleStub<u32>,
-    create_more: InterceptingStub<u32, Fn(&u32)>,
-    //phantom: PhantomData<&'stub ()>
-  }
-
-  impl IssueCommenterStub {
-    fn new() -> IssueCommenterStub {
-      IssueCommenterStub {
-        create_comment: ArgWatchingStub::new(),
-        create_fun: ArgWatchingStub::new(),
-        create_other: SimpleStub::new(),
-        create_more: InterceptingStub::new(),
-        //phantom: PhantomData
-      }
+  create_stub! {
+    IssueCommenterStub {
+      {ArgWatchingStub: create_comment (Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {ArgWatchingStub: create_fun (u32) -> u32}
+      {SimpleStub: create_other (u32) -> u32}
+      {InterceptingStub: create_more (&u32) -> u32}
     }
   }
 
   instrument_stub! {
     IssueCommenterStub as IssueCommenter {
-      {ArgWatchingStub create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
-      {ArgWatchingStub create_fun (&self, b1: u32) -> u32}
-      {SimpleStub create_other (&self, b1: u32) -> u32}
-      {InterceptingStub create_more (&self, b1: &u32) -> u32}
+      {ArgWatchingStub: create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {ArgWatchingStub: create_fun (&self, b1: u32) -> u32}
+      {SimpleStub: create_other (&self, b1: u32) -> u32}
+      {InterceptingStub: create_more (&self, b1: &u32) -> u32}
     }
   }
 
@@ -326,7 +349,7 @@ mod tests {
   #[test]
   fn it_can_test_borrows_and_succeed() {
     let mut stub = IssueCommenterStub::new();
-    stub.create_more.set_interceptor(Box::new(move |x: &u32| assert!(*x == y)));
+    stub.create_more.set_interceptor(Box::new(move |x: &u32| assert!(*x == 1)));
     stub.create_more.returns(10);
     let _ = stub.create_more(&1);
     assert!(stub.create_more.was_called_once());
