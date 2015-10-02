@@ -1,4 +1,5 @@
-#![feature(type_macros)]
+#![cfg_attr(feature = "nightly", feature(type_macros))]
+
 use std::cell::{Cell, RefCell};
 
 pub trait CallWatcher { fn call_count(&self) -> u32;
@@ -227,34 +228,39 @@ macro_rules! instrument_stub {
 
 }
 
-#[macro_export]
-macro_rules! build_stub_type {
-  (ArgWatchingStub ($($arg_type:ty),*) -> $ret_type:ty) => {
-    ArgWatchingStub<$ret_type, ($($arg_type),*)>
-  };
-  (SimpleStub ($($arg_type:ty),*) -> $ret_type:ty) => {
-    SimpleStub<$ret_type>
-  };
-  (InterceptingStub ($($arg_type:ty),*) -> $ret_type:ty) => {
-    InterceptingStub<$ret_type, Fn($($arg_type),*)>
-  };
-}
+#[cfg(feature = "nightly")]
+#[macro_use]
+mod type_macros {
 
-#[macro_export]
-macro_rules! create_stub {
-  (
-    $new_type:ident {
-      $({$stub_ty:ident: $fn_ident:ident $($e:tt)*})*
-    }
-  ) => {
-    struct $new_type {
-      $($fn_ident: build_stub_type!($stub_ty $($e)*)),*
-    }
+  #[macro_export]
+  macro_rules! build_stub_type {
+    (ArgWatchingStub ($($arg_type:ty),*) -> $ret_type:ty) => {
+      ArgWatchingStub<$ret_type, ($($arg_type),*)>
+    };
+    (SimpleStub ($($arg_type:ty),*) -> $ret_type:ty) => {
+      SimpleStub<$ret_type>
+    };
+    (InterceptingStub ($($arg_type:ty),*) -> $ret_type:ty) => {
+      InterceptingStub<$ret_type, Fn($($arg_type),*)>
+    };
+  }
 
-    impl $new_type {
-      fn new() -> $new_type {
-        $new_type {
-          $($fn_ident: $stub_ty::new()),*
+  #[macro_export]
+  macro_rules! create_stub {
+    (
+      $new_type:ident {
+        $({$stub_ty:ident: $fn_ident:ident $($e:tt)*})*
+      }
+    ) => {
+      struct $new_type {
+        $($fn_ident: build_stub_type!($stub_ty $($e)*)),*
+      }
+
+      impl $new_type {
+        fn new() -> $new_type {
+          $new_type {
+            $($fn_ident: $stub_ty::new()),*
+          }
         }
       }
     }
@@ -282,12 +288,33 @@ mod tests {
     let _ = a.create_comment(1, 2, 3);
   }
 
+  #[cfg(feature = "nightly")]
   create_stub! {
     IssueCommenterStub {
       {ArgWatchingStub: create_comment (Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>}
       {ArgWatchingStub: create_fun (u32) -> u32}
       {SimpleStub: create_other (u32) -> u32}
       {InterceptingStub: create_more (&u32) -> u32}
+    }
+  }
+
+  #[cfg(not(feature = "nightly"))]
+  struct IssueCommenterStub {
+    create_comment: ArgWatchingStub<Result<IssueComment, GitErr>, (Repository, IssueId, CreateIssueComment)>,
+    create_fun: ArgWatchingStub<u32, (u32)>,
+    create_other: SimpleStub<u32>,
+    create_more: InterceptingStub<u32, Fn(&u32)>,
+  }
+
+  #[cfg(not(feature = "nightly"))]
+  impl IssueCommenterStub {
+    fn new() -> IssueCommenterStub {
+      IssueCommenterStub {
+        create_comment: ArgWatchingStub::new(),
+        create_fun: ArgWatchingStub::new(),
+        create_other: SimpleStub::new(),
+        create_more: InterceptingStub::new(),
+      }
     }
   }
 
