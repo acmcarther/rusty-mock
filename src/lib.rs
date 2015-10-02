@@ -117,7 +117,7 @@ impl<T: Clone, Interceptor: ?Sized> InterceptingStub<T, Interceptor> {
 
 #[macro_export]
 macro_rules! impl_helper {
-  (ArgWatchingStub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (ArgWatchingStub: $fn_ident:ident (&self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -125,11 +125,11 @@ macro_rules! impl_helper {
           args.push(($($arg_ident),*));
           val
         },
-        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+        _ => panic!("#returns was not called on [{}] prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (InterceptingStub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (InterceptingStub: $fn_ident:ident (&self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -140,11 +140,11 @@ macro_rules! impl_helper {
           self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
           val
         },
-        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+        _ => panic!("#returns was not called on [{}] prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (SimpleStub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (SimpleStub: $fn_ident:ident (&self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     #[allow(unused_variables)]
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
@@ -152,11 +152,11 @@ macro_rules! impl_helper {
           self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
           val
         },
-        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+        _ => panic!("#returns was not called on [{}] prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (ArgWatchingStub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (ArgWatchingStub: $fn_ident:ident (&mut self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -164,11 +164,11 @@ macro_rules! impl_helper {
           args.push(($($arg_ident),*));
           val
         },
-        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+        _ => panic!("#returns was not called on [{}] prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (InterceptingStub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (InterceptingStub: $fn_ident:ident (&mut self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -176,11 +176,11 @@ macro_rules! impl_helper {
           self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
           val
         },
-        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+        _ => panic!("#returns was not called on [{}] prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (SimpleStub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (SimpleStub: $fn_ident:ident (&mut self $(,$arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     #[allow(unused_variables)]
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
@@ -188,28 +188,28 @@ macro_rules! impl_helper {
           self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
           val
         },
-        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+        _ => panic!("#returns was not called on [{}] prior to invocation", stringify!($fn_ident))
       }
     }
   };
-  (nostub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (nostub: $fn_ident:ident (&self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $(_: $arg_type),*) -> $ret_type {
-      panic!("Method was not stubbed {}", stringify!($fn_ident))
+      panic!("Method [{}] was not stubbed", stringify!($fn_ident))
     }
   };
-  (nostub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (nostub: $fn_ident:ident (&mut self $(,$arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $(_: $arg_type),*) -> $ret_type {
-      panic!("Method was not stubbed {}", stringify!($fn_ident))
+      panic!("Method [{}] was not stubbed", stringify!($fn_ident))
     }
   };
-  (nostub $fn_ident:ident (self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (nostub: $fn_ident:ident (self $(, $arg_ident:ident: $arg_type:ty)*) -> $ret_type:ty) => {
     fn $fn_ident (self, $(_: $arg_type),*) -> $ret_type {
-      panic!("Method {} not stubbed, and self-consuming methods cannot currently be stubbed", stringify!($fn_ident))
+      panic!("Method [{}] was not stubbed and self-consuming methods cannot currently be stubbed", stringify!($fn_ident))
     }
   };
-  (nostub $fn_ident:ident ($($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (nostub: $fn_ident:ident ($($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident ($(_: $arg_type),*) -> $ret_type {
-      panic!("Method {} not stubbed and static methods cannot currently be stubbed", stringify!($fn_ident))
+      panic!("Method [{}] was not stubbed and static methods cannot currently be stubbed", stringify!($fn_ident))
     }
   };
 }
@@ -218,11 +218,11 @@ macro_rules! impl_helper {
 macro_rules! instrument_stub {
   (
     $new_type:ty as $tr8:ident {
-      $({$stub_ty:ident: $($e:tt)*})*
+      $({$($e:tt)*})*
     }
   ) => {
     impl $tr8 for $new_type {
-      $(impl_helper!($stub_ty $($e)*);)*
+      $(impl_helper!($($e)*);)*
     }
   }
 
@@ -331,7 +331,7 @@ mod tests {
 
 
   #[test]
-  #[should_panic(expected = "#returns was not called on create_comment prior to invocation")]
+  #[should_panic(expected = "#returns was not called on [create_comment] prior to invocation")]
   fn panics_when_return_not_defined() {
     let stub = IssueCommenterStub::new();
     let _ = stub.create_comment(1, 2, 3);
