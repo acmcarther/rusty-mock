@@ -323,8 +323,8 @@ mod multiple_stub_types {
   }
 
   struct TraitStub {
-    arg_watching_stub: ArgWatchingStub<(i32), (i32, String)>,
-    intercepting_stub: InterceptingStub<(i32), Fn(&i32, &str)>,
+    arg_watching_stub: ArgWatchingStub<i32, (i32, String)>,
+    intercepting_stub: InterceptingStub<i32, Fn(&i32, &str)>,
   }
 
   impl TraitStub {
