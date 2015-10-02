@@ -1,8 +1,6 @@
-use std::cell::RefCell;
-use std::marker::PhantomData;
+use std::cell::{Cell, RefCell};
 
-pub trait CallWatcher {
-  fn call_count(&self) -> u32;
+pub trait CallWatcher { fn call_count(&self) -> u32;
   fn was_called_n_times(&self, times: u32) -> bool { self.call_count() == times }
   fn was_called_once(&self) -> bool { self.was_called_n_times(1) }
   fn was_called(&self) -> bool { self.call_count() != 0 }
@@ -14,7 +12,7 @@ pub trait ReturnStubber<T> {
 
 pub struct SimpleStub<T: Clone> {
   pub return_val: Option<T>,
-  pub call_count: u32
+  pub call_count: Cell<u32>
 }
 
 pub struct ArgWatchingStub<T: Clone, Args> {
@@ -22,11 +20,19 @@ pub struct ArgWatchingStub<T: Clone, Args> {
   pub call_args: RefCell<Vec<Args>>
 }
 
-pub struct InterceptingStub<T: Clone, Args, F: Fn(Args)> {
+pub struct InterceptingStub<T: Clone, Interceptor: ?Sized> {
   pub return_val: Option<T>,
-  pub call_interceptor: F,
-  pub call_count: u32,
-  phantom: PhantomData<Args> // Necessary because Fn(Args) does not count as "using" args
+  pub call_interceptor: Option<Box<Interceptor>>,
+  pub call_count: Cell<u32>,
+}
+
+impl<T: Clone> SimpleStub<T> {
+  pub fn new() -> SimpleStub<T> {
+    SimpleStub {
+      return_val: None,
+      call_count: Cell::new(0)
+    }
+  }
 }
 
 impl<T: Clone, Args> ArgWatchingStub<T, Args> {
@@ -34,6 +40,16 @@ impl<T: Clone, Args> ArgWatchingStub<T, Args> {
     ArgWatchingStub {
       return_val: None,
       call_args: RefCell::new(Vec::new())
+    }
+  }
+}
+
+impl<T: Clone, Interceptor: ?Sized> InterceptingStub<T, Interceptor> {
+  pub fn new() -> InterceptingStub<T, Interceptor> {
+    InterceptingStub {
+      return_val: None,
+      call_interceptor: None,
+      call_count: Cell::new(0),
     }
   }
 }
@@ -46,7 +62,7 @@ impl<T: Clone, Args> ReturnStubber<T> for ArgWatchingStub<T, Args> {
   fn returns(&mut self, val: T) { self.return_val = Some(val); }
 }
 
-impl<T: Clone, Args, F: Fn(Args)> ReturnStubber<T> for InterceptingStub<T, Args, F> {
+impl<T: Clone, Interceptor: ?Sized> ReturnStubber<T> for InterceptingStub<T, Interceptor> {
   fn returns(&mut self, val: T) { self.return_val = Some(val); }
 }
 
@@ -55,11 +71,11 @@ impl<T: Clone, Args> CallWatcher for ArgWatchingStub<T, Args> {
 }
 
 impl<T: Clone> CallWatcher for SimpleStub<T> {
-  fn call_count(&self) -> u32 { self.call_count }
+  fn call_count(&self) -> u32 { self.call_count.get() }
 }
 
-impl<T: Clone, Args, F: Fn(Args)> CallWatcher for InterceptingStub<T, Args, F> {
-  fn call_count(&self) -> u32 { self.call_count }
+impl<T: Clone, Interceptor: ?Sized> CallWatcher for InterceptingStub<T, Interceptor> {
+  fn call_count(&self) -> u32 { self.call_count.get() }
 }
 
 impl<T: Clone, Args: Clone> ArgWatchingStub<T, Args> {
@@ -91,36 +107,15 @@ impl<T: Clone, Args: PartialEq> ArgWatchingStub<T, Args> {
   }
 }
 
-impl<T: Clone, Args, F: Fn(Args)> InterceptingStub<T, Args, F> {
-  pub fn set_interceptor(&mut self, f: F) {
-    self.call_interceptor = f
-  }
-}
-
-#[macro_export]
-macro_rules! create_stub {
-  (
-    $new_type:ident {
-      $($fn_ident:ident ($($arg_ty:ty),*) -> $ret_ty:ty),*
-    }
-  ) => {
-    struct $new_type {
-      $($fn_ident: ArgWatchingStub<$ret_ty, ($($arg_ty),*)>),*,
-    }
-
-    impl $new_type {
-      fn new() -> $new_type {
-        $new_type {
-          $($fn_ident: ArgWatchingStub::new()),*
-        }
-      }
-    }
+impl<T: Clone, Interceptor: ?Sized> InterceptingStub<T, Interceptor> {
+  pub fn set_interceptor(&mut self, f: Box<Interceptor>) {
+    self.call_interceptor = Some(f)
   }
 }
 
 #[macro_export]
 macro_rules! impl_helper {
-  (stub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (ArgWatchingStub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
@@ -132,12 +127,63 @@ macro_rules! impl_helper {
       }
     }
   };
-  (stub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+  (InterceptingStub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          match self.$fn_ident.call_interceptor {
+            Some(ref method) => method((($($arg_ident),*))),
+            None => ()
+          }
+          self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
+          val
+        },
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+      }
+    }
+  };
+  (SimpleStub $fn_ident:ident (&self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    #[allow(unused_variables)]
+    fn $fn_ident (&self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
+          val
+        },
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+      }
+    }
+  };
+  (ArgWatchingStub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
     fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
       match self.$fn_ident.return_val.clone() {
         Some(val) => {
           let mut args = self.$fn_ident.call_args.borrow_mut();
           args.push(($($arg_ident),*));
+          val
+        },
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+      }
+    }
+  };
+  (InterceptingStub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          self.$fn_ident.call_interceptor.map(|method| method((($($arg_ident),*))));
+          self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
+          val
+        },
+        _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
+      }
+    }
+  };
+  (SimpleStub $fn_ident:ident (&mut self, $($arg_ident:ident: $arg_type:ty),*) -> $ret_type:ty) => {
+    #[allow(unused_variables)]
+    fn $fn_ident (&mut self, $($arg_ident: $arg_type),*) -> $ret_type {
+      match self.$fn_ident.return_val.clone() {
+        Some(val) => {
+          self.$fn_ident.call_count.set(1 + self.$fn_ident.call_count.get());
           val
         },
         _ => panic!("#returns was not called on {} prior to invocation", stringify!($fn_ident))
@@ -169,11 +215,11 @@ macro_rules! impl_helper {
 #[macro_export]
 macro_rules! instrument_stub {
   (
-    $new_type:ident as $tr8:ident {
+    $new_type:ty as $tr8:ident {
       $({$fn_ident:ident $($e:tt)*})*
     }
   ) => {
-    impl $tr8 for $new_type {
+    impl<'a1, 'a2, 'a3, 'a4, 'a5, 'a6, 'a7, 'a8> $tr8 for $new_type {
       $(impl_helper!($fn_ident $($e)*);)*
     }
   }
@@ -184,6 +230,7 @@ macro_rules! instrument_stub {
 #[cfg(test)]
 mod tests {
   use super::*;
+  use std::marker::PhantomData;
   type Repository = u32;
   type IssueId = u32;
   type CreateIssueComment = u32;
@@ -193,25 +240,44 @@ mod tests {
   trait IssueCommenter {
     fn create_comment(&self, _: Repository, _: IssueId, details: CreateIssueComment) -> Result<IssueComment, GitErr>;
     fn create_fun(&self, _: u32) -> u32;
+    fn create_other(&self, _: u32) -> u32;
+    fn create_more(&self, _: &u32) -> u32;
   }
 
   fn i_take_a_thing<T: IssueCommenter>(a: &T) {
     let _ = a.create_comment(1, 2, 3);
   }
 
-  create_stub! {
-    IssueCommenterStub {
-      create_comment(Repository, IssueId, CreateIssueComment) -> Result<IssueComment, GitErr>,
-      create_fun(u32) -> u32
+  struct IssueCommenterStub {
+    create_comment: ArgWatchingStub<Result<IssueComment, GitErr>, (Repository, IssueId, CreateIssueComment)>,
+    create_fun: ArgWatchingStub<u32, (u32)>,
+    create_other: SimpleStub<u32>,
+    create_more: InterceptingStub<u32, Fn(&u32)>,
+    //phantom: PhantomData<&'stub ()>
+  }
+
+  impl IssueCommenterStub {
+    fn new() -> IssueCommenterStub {
+      IssueCommenterStub {
+        create_comment: ArgWatchingStub::new(),
+        create_fun: ArgWatchingStub::new(),
+        create_other: SimpleStub::new(),
+        create_more: InterceptingStub::new(),
+        //phantom: PhantomData
+      }
     }
   }
 
   instrument_stub! {
     IssueCommenterStub as IssueCommenter {
-      {stub create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
-      {stub create_fun (&self, b1: u32) -> u32}
+      {ArgWatchingStub create_comment (&self, a1: Repository, a2: IssueId, a3: CreateIssueComment) -> Result<IssueComment, GitErr>}
+      {ArgWatchingStub create_fun (&self, b1: u32) -> u32}
+      {SimpleStub create_other (&self, b1: u32) -> u32}
+      {InterceptingStub create_more (&self, b1: &u32) -> u32}
     }
   }
+
+  type T = Fn(&i32, &i32) -> bool;
 
 
   #[test]
@@ -246,6 +312,24 @@ mod tests {
     stub.create_comment.returns(Err(5));
     let _ = stub.create_comment(1, 2, 3);
     assert!(stub.create_comment.was_called_once());
+  }
+
+  #[test]
+  #[should_panic(expected = "assertion failed: *x == 5")]
+  fn it_can_test_borrows_and_fail() {
+    let mut stub = IssueCommenterStub::new();
+    stub.create_more.set_interceptor(Box::new(move |x: &u32| assert!(*x == 5)));
+    stub.create_more.returns(10);
+    let _ = stub.create_more(&1);
+  }
+
+  #[test]
+  fn it_can_test_borrows_and_succeed() {
+    let mut stub = IssueCommenterStub::new();
+    stub.create_more.set_interceptor(Box::new(move |x: &u32| assert!(*x == y)));
+    stub.create_more.returns(10);
+    let _ = stub.create_more(&1);
+    assert!(stub.create_more.was_called_once());
   }
 
   #[test]
