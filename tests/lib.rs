@@ -1,7 +1,7 @@
 #![cfg_attr(feature = "nightly", feature(type_macros))]
 
 #[macro_use]
-extern crate rusty_mock;
+extern crate rust_stub;
 
 mod default_tests {
   #[test]
