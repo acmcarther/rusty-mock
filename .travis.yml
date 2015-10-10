@@ -1,9 +1,12 @@
 language: rust
 sudo: false
-rust:
-  - stable
-  - beta
-  - nightly
 matrix:
-  allow_failures:
+  include:
     - rust: nightly
+      env: FEATURES=nightly
+    - rust: beta
+      env: FEATURES=''
+    - rust: stable
+      env: FEATURES=''
+script:
+   - cargo test --features "$FEATURES"
