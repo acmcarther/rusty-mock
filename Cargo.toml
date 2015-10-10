@@ -1,5 +1,5 @@
 [package]
-name = "rusty-mock"
+name = "rust_stub"
 version = "0.1.0"
 authors = ["Alex McArther <acmcarther@gmail.com>"]
 
