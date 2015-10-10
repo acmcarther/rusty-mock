@@ -67,7 +67,7 @@ mod no_stub {
 }
 
 mod simple_stub {
-  use rusty_mock::*;
+  use rust_stub::*;
 
   trait Trait {
     fn self_fn(&self);
@@ -141,7 +141,7 @@ mod simple_stub {
 }
 
 mod arg_watching_stub {
-  use rusty_mock::*;
+  use rust_stub::*;
 
   trait Trait {
     fn self_fn(&self);
@@ -227,7 +227,7 @@ mod arg_watching_stub {
 }
 
 mod intercepting_stub {
-  use rusty_mock::*;
+  use rust_stub::*;
 
   trait Trait {
     fn self_fn(&self);
@@ -314,7 +314,7 @@ mod intercepting_stub {
 }
 
 mod multiple_stub_types {
-  use rusty_mock::*;
+  use rust_stub::*;
 
   trait Trait {
     fn arg_watching_stub(&self, i32, String) -> i32;
@@ -377,7 +377,7 @@ mod multiple_stub_types {
 }
 
 mod multiple_trait_stub {
-  use rusty_mock::*;
+  use rust_stub::*;
 
   trait FirstTrait {
     fn give_a_string(&self, i32) -> String;
@@ -432,7 +432,7 @@ mod multiple_trait_stub {
 
 #[cfg(feature = "nightly")]
 mod stub_create_macro {
-  use rusty_mock::*;
+  use rust_stub::*;
 
   trait Trait {
     fn arg_watching_stub(&self, u32, u32, u32) -> Result<u32, u32>;
